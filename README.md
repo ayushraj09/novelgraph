@@ -4,8 +4,6 @@
 
 NovelGraph ingests research papers into a **typed entity graph** (Paper, Method, Dataset, Task, Result), detects **Method ↔ Dataset combinations that have never been tried together but are structurally close** (via shared-neighbor analysis and lexical task clustering), and then runs a **multi-hop reasoning + dual-agent verification loop** to turn each candidate pair into an evidence-backed hypothesis — with every citation checked against the literal graph, not just plausible-sounding.
 
-I built this end-to-end as my own project during a hackathon organized by [Cognee](https://cognee.ai/), which provided the underlying graph-construction and retrieval engine; the schema design, novelty-detection heuristics, orchestration pipeline, agentic verification loop, and the Streamlit interface are my own work.
-
 ## Why this exists
 
 Literature review doesn't scale past a few dozen papers. A researcher can hold maybe 10-15 papers' worth of Method/Dataset combinations in their head at once; a real corpus has hundreds. The interesting question isn't "what did paper X do" — it's "what combination of an existing method and an existing dataset has *nobody tried yet*, even though they're one hop apart in the literature." That's a graph-structure question, not a summarization question, which is why this is built around explicit typed nodes and edges rather than a flat vector index.
@@ -164,7 +162,7 @@ See [`docs/APP_GUIDE.md`](docs/APP_GUIDE.md) for a full tour of the UI's tabs, i
 
 ## Acknowledgements
 
-Built during a hackathon organized by Cognee, with [HardikShreays](https://github.com/HardikShreays) as a collaborator on the team.
+Built during a hackathon organized by [Cognee](https://cognee.ai/), with [HardikShreays](https://github.com/HardikShreays) as a collaborator on the team.
 
 ## License
 
