@@ -1,0 +1,28 @@
+# Environments
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Project runtime artifacts
+.cognee_system/
+.cognee_data/
+.pdf_text_cache/
+run_history.jsonl
+graph_debug.html
+uploaded_papers/
+
+# Data (keep the folder, ignore uploaded papers)
+data/papers/*
+!data/papers/.gitkeep
+*.pdf
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

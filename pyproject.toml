@@ -1,0 +1,34 @@
+[project]
+name = "novelgraph"
+version = "0.1.0"
+description = "Typed knowledge-graph pipeline for surfacing untested research directions and verifying evidence-backed hypotheses about them."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "cognee",
+    "cognee-integration-langgraph",
+    "langgraph",
+    "langchain-core",
+    "langchain-openai",
+    "python-dotenv",
+    "pymupdf",
+    "pymupdf4llm",
+    "openai",
+    "streamlit",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/novelgraph"]
+
+[tool.uv]
+package = true
