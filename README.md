@@ -47,7 +47,7 @@ Papers (PDF/DOCX/PPTX/TXT/MD/CSV)
 
 - **No direct Method↔Dataset edge in the schema.** A Paper is what links a Method and a Dataset. This is deliberate: it's exactly what makes "these two are structurally close but never directly connected" a well-defined, computable condition rather than a fuzzy semantic judgment.
 - **Task-name clustering, not exact-match.** The same real-world task shows up as different literal strings across papers ("skin lesion classification" vs. "medical image classification"). Greedy single-pass clustering by Jaccard word-overlap merges these before joining Method/Dataset pairs on a shared Task, without ever calling an embedding API for it.
-- **Citation grounding is enforced, not assumed.** Both agent prompts define a valid citation as an *exact* node/edge identity as it appears in the graph — not a paraphrase of a node's description. A logged production run surfaced exactly the failure mode this guards against: an invented phrase that sounded plausible enough to pass a naive check. Read the full writeup in [`docs/APP_GUIDE.md`](docs/APP_GUIDE.md#a-caveat-about-approved-hypotheses).
+- **Citation grounding is enforced, not assumed.** Both agent prompts define a valid citation as an *exact* node/edge identity as it appears in the graph — not a paraphrase of a node's description. A logged production run surfaced exactly the failure mode this guards against: an invented phrase that sounded plausible enough to pass a naive check.
 - **Cost-aware by construction.** Content-hash deduplication at ingestion, pipeline-status dedup at graph-build time, and a persisted run-history log mean re-running the pipeline never re-spends LLM/embedding calls on papers or (Method, Dataset) pairs already processed.
 
 ### Graph visualization
