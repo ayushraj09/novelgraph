@@ -58,7 +58,13 @@ Every pipeline run also writes an interactive HTML visualization of the construc
 
 ## Example run
 
-Fed 3 papers on diffusion-based synthetic data generation for imbalanced medical image classification (diabetic retinopathy grading and skin lesion classification), the pipeline surfaced 3 candidate (Method, Dataset) pairs. The Critic approved 1 and rejected 2 - which is the verification loop doing its job, not a failure rate to minimize.
+Fed 3 papers on diffusion-based synthetic data generation for imbalanced medical image classification (diabetic retinopathy grading and skin lesion classification):
+
+1. [Iterative Online Image Synthesis via Diffusion Model for Imbalanced Classification](https://papers.miccai.org/miccai-2024/paper/0901_paper.pdf)
+2. [Class-Conditioned Image Synthesis with Diffusion for Imbalanced Diabetic Retinopathy Grading](https://papers.miccai.org/miccai-2025/paper/4449_paper.pdf)
+3. [LesionGen: A Concept-Guided Diffusion Model for Dermatology Image Synthesis](https://workshop.isic-archive.com/2025/paper_fayyad.pdf)
+
+The pipeline surfaced 3 candidate (Method, Dataset) pairs. The Critic approved 1 and rejected 2 - which is the verification loop doing its job, not a failure rate to minimize.
 
 **Approved:** *Iterative Online Image Synthesis (IOIS) × DDR Dataset*
 
