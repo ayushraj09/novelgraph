@@ -160,7 +160,7 @@ def _node_names_by_type(nodes, name_col, type_name: str) -> list:
 
 
 async def find_novel_pairs():
-    nodes, edges = load_graph()
+    nodes, edges = await load_graph()
     if not nodes or not edges:
         return []
 

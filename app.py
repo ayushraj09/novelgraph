@@ -91,7 +91,7 @@ def safe_filename(name: str) -> str:
 
 def graph_snapshot() -> tuple[list, list]:
     try:
-        return load_graph()
+        return run_async(load_graph())
     except Exception:
         return [], []
 

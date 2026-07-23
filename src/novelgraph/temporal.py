@@ -25,7 +25,7 @@ TASKS_EDGE_LABEL = "tasks"        # DatasetNode -> Task
 
 
 async def check_temporal_novelty(method_name: str, dataset_name: str, before_year: int = 2024) -> str:
-    nodes, edges = load_graph()
+    nodes, edges = await load_graph()
     if not nodes or not edges:
         return "No graph data available."
 

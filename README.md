@@ -15,14 +15,14 @@ Papers (PDF/DOCX/PPTX/TXT/MD/CSV)
         │
         ▼
 ┌────────────────────┐   1. Typed schema        Paper --method--> Method
-│  Graph Construction│   2. Chunked extraction  Paper --dataset-> DatasetNode
-│  (typed DataPoints)│      + incremental       DatasetNode --tasks--> Task
+│ Graph Construction │   2. Chunked extraction  Paper --dataset-> DatasetNode
+│ (typed DataPoints) │      + incremental       DatasetNode --tasks--> Task
 └────────────────────┘        ingestion          Method --used_for--> Task
         │                                       Result --derived_from--> Method
         ▼
 ┌────────────────────┐   3. Untested (Method, Dataset) pairs ranked by
 │ Novelty Detection  │      shared structural neighbors (common Task),
-│ (structural, local)│      with Jaccard-clustered task names and a
+│(structural, local) │      with Jaccard-clustered task names and a
 └────────────────────┘      lexical-similarity tiebreaker — zero LLM calls
         │
         ▼
@@ -33,7 +33,7 @@ Papers (PDF/DOCX/PPTX/TXT/MD/CSV)
         ▼
 ┌────────────────────┐   5/6. Temporal/prior-art check, then a Generator/
 │ Agentic Refinement │       Critic loop (LangGraph) where the Critic
-│  (Generator/Critic)│       rejects any citation that isn't an exact,
+│ (Generator/Critic) │       rejects any citation that isn't an exact,
 └────────────────────┘       literal node/edge identity in the graph
         │
         ▼
@@ -54,8 +54,44 @@ Papers (PDF/DOCX/PPTX/TXT/MD/CSV)
 
 Every pipeline run also writes an interactive HTML visualization of the constructed graph.
 
-<!-- Replace this with a screenshot or embed of your generated graph_debug.html -->
 ![Knowledge graph visualization](docs/graph_screenshot.png)
+
+## Example run
+
+Fed 3 papers on diffusion-based synthetic data generation for imbalanced medical image classification (diabetic retinopathy grading and skin lesion classification), the pipeline surfaced 3 candidate (Method, Dataset) pairs. The Critic approved 1 and rejected 2 - which is the verification loop doing its job, not a failure rate to minimize.
+
+**Approved:** *Iterative Online Image Synthesis (IOIS) × DDR Dataset*
+
+IOIS - originally validated on the HAM10000 and APTOS datasets - uses classifier-gradient feedback to guide diffusion-based synthesis, plus accuracy-adaptive sampling that assigns more synthetic samples to whichever class the classifier currently handles worst. The DDR Dataset (a different diabetic retinopathy corpus, never paired with IOIS in any ingested paper) has the same severe class-imbalance problem, and a class-conditioned diffusion baseline was already shown to lift its balanced accuracy from ~66.8% to ~74.2%. The generated hypothesis proposes that IOIS's classifier-aware, iterative synthesis should extend that same gain further, and every cited claim ("Node: Iterative Online Image Synthesis (IOIS)", "Node: DDR Dataset", "Node: Diabetic Retinopathy Grading", etc.) resolved to an exact entity in the graph, so the Critic approved it. Evidence assembly then pulled section-level citations grounding each claim back to the source PDFs (e.g. the DDR balanced-accuracy figures traced to a specific results table).
+
+**Rejected:** *Class-Conditioned Diffusion Model Finetuning with Semantic Quality Filtering × Dermatological Images with Concept-Guided Captions*
+
+This pairing looked plausible on the surface - both are diffusion-based synthesis methods for imbalanced medical imaging. But that specific finetuning method was only ever described in the graph as applied to retinal fundus images for diabetic retinopathy grading; the dermatological-captions dataset was linked instead to a *different* method (LesionGen). The Critic's verdict was direct: *"There is no exact node or relationship indicating that [this method] is applied to... the 'Dermatological Images with Concept-Guided Captions' dataset."* No citation-splicing or approximate matching allowed it through - which is exactly the failure mode the grounding rule exists to catch.
+
+## Evaluation
+
+`eval.py` computes run-level metrics with zero additional LLM/embedding calls, from the report a completed run already produced. A real 3-paper run:
+
+```
+============================================================
+EVALUATION SUMMARY
+============================================================
+Pairs evaluated:      3
+Approval rate:        33%  (Critic verified every cited claim against the graph)
+Evidence coverage:    100%  (approved hypotheses with >=1 citable evidence bullet)
+Avg shared neighbors: 0.0  (structural novelty signal, from novelty.py)
+Avg lexical similarity: 0.112  (description-overlap proxy for embedding similarity)
+Cumulative across all logged runs (run_history.jsonl): 3 pairs verified, 3 unique, 33% approval rate.
+```
+
+What these numbers actually say about this particular run:
+
+- **Approval rate (33%)** is the fraction of candidate pairs whose every cited claim resolved to an exact graph entity - a cheap, mechanical proxy for "grounded, not hallucinated," computed with no ground truth needed. On a 3-paper corpus, 1-in-3 approved is a healthy signal that the Critic is actually rejecting things, not rubber-stamping.
+- **Evidence coverage (100%)** means the one approved hypothesis also got at least one citable evidence bullet from Stage 7 - approved-in-principle and actually-citable aren't the same thing, and this run's approved pair was both.
+- **Avg shared neighbors (0.0)** reveals something specific about *this* run: with only 3 papers, no two Method/Dataset pairs shared an explicit Task node, so `novelty.py`'s exploratory fallback (ranking by Method/Dataset description overlap instead) supplied the candidates. On a larger corpus, this number should climb above 0 as shared-Task structure emerges.
+- **Avg lexical similarity (0.112)** is the Jaccard word-overlap between the chosen Method's and Dataset's description text - low here because the fallback path optimizes for *some* overlap, not high overlap.
+
+Every logged run also updates `run_history.jsonl` (cumulative stats above), so re-running the pipeline over an expanding paper corpus builds a running approval-rate trend, not just a single-run snapshot.
 
 ## Project layout
 
@@ -63,9 +99,10 @@ Every pipeline run also writes an interactive HTML visualization of the construc
 .
 ├── src/novelgraph/          # Installable package — all core logic
 │   ├── schema.py            # Typed DataPoint graph schema
+│   ├── config.py            # Auto-resolves Cognee's storage paths to this project's own folder
 │   ├── ingest.py            # PDF preprocessing + incremental ingestion
 │   ├── pdf_preprocess.py    # Layout/table-aware PDF -> markdown, optional figure captioning
-│   ├── graph_store.py       # Direct, zero-cost reads of the graph's SQLite store
+│   ├── graph_store.py       # Zero-cost reads of the graph via Cognee's own graph-engine accessor
 │   ├── novelty.py           # Structural novelty detection + task clustering
 │   ├── temporal.py          # Prior-art / "has this been tried before year X" checks
 │   ├── hypothesis.py        # Multi-hop chain-of-thought hypothesis seeding
@@ -81,9 +118,9 @@ Every pipeline run also writes an interactive HTML visualization of the construc
 │   ├── chat_cli.py           # Terminal REPL for Q&A over the graph
 │   ├── smoke_test.py         # Cheap end-to-end sanity check (pennies, not your real corpus)
 │   ├── debug_novelty.py      # Re-run novelty detection against the existing graph, zero cost
-│   └── inspect_db.py         # Dump the graph engine's SQLite schema/rows
+│   └── inspect_db.py         # Dump live graph-engine data + the SQLite metadata store
 ├── app.py                   # Streamlit UI (upload, chat, discover, graph explorer)
-├── docs/APP_GUIDE.md         # Streamlit UI walkthrough + known caveats
+├── docs/graph_screenshot.png # (add your own) screenshot of graph_debug.html, used in the README
 ├── data/papers/              # Drop research papers here
 ├── pyproject.toml
 └── .env.example
@@ -134,7 +171,30 @@ uv run scripts/chat_cli.py
 uv run streamlit run app.py
 ```
 
-See [`docs/APP_GUIDE.md`](docs/APP_GUIDE.md) for a full tour of the UI's tabs, including the graph explorer and the automated citation checker.
+A local Streamlit front-end over the same pipeline above (`novelgraph.ingest`, `novelgraph.novelty`, `novelgraph.temporal`, `novelgraph.agents`, `novelgraph.evidence`, `novelgraph.eval`, `novelgraph.run_history`, `novelgraph.chat`) - it doesn't reimplement any of the logic, just wraps it with a UI. See below for a full tour.
+
+## Streamlit UI
+
+### What's in each tab
+
+- **Upload & Ingest**: drag in papers (PDF/DOCX/PPTX/TXT/MD/CSV). PDFs get the same pymupdf4llm pre-parsing as the CLI. Ingestion is incremental - re-uploading an already-ingested paper costs nothing further.
+- **Chat**: same `GRAPH_COMPLETION` flow as `scripts/chat_cli.py`, including the paper inventory shortcut and short in-session memory, just rendered as a chat UI instead of a terminal loop. Use this to sanity-check ingestion and explore *before* running the expensive Novelty pipeline - it's a single LLM call per question, versus 6+ per pair in the pipeline below.
+- **Novelty & Hypotheses**: runs Stages 3-8, in two modes:
+  - *Auto-discover top pairs* - `novelty.py`'s shared-Task heuristic ranks candidate (Method, Dataset) pairs; on a small corpus this can surface just one pair (or none), so don't be surprised if the slider doesn't matter yet.
+  - *Check a specific pair* - pick (or type) any Method/Dataset directly and run the same Stage 5-7 verification on it. This is the one worth using once you have your own paper in mind: type your method against an existing dataset node (or vice versa) and see whether the Critic can actually ground a hypothesis for it.
+
+  Both modes generate a hypothesis, verify it through the Generator/Critic loop, pull evidence, and show a per-run + cumulative eval summary. Verified pairs are cached in `run_history.jsonl` so re-running doesn't re-spend LLM calls on pairs you've already resolved. Each result also gets an **automated citation check**: `check_citations()` pulls every `(Node: ...)`/`(Nodes: ...)` span out of the generated text and compares it against the graph's real entity names, as a code-level backstop on top of the Critic's own LLM judgment (see [Example run](#example-run) above for what the Critic itself catches or misses). It's a heuristic regex over varied LLM phrasing, not a formal parser, so treat a clean check as reassuring and a flagged one as "verify manually" rather than either as gospel - the Graph Explorer tab lists every real entity name for exactly that manual spot-check.
+- **Graph Explorer**: lists every exact Method/DatasetNode/Task/Paper/Result name in the graph (zero-cost read via Cognee's own graph engine accessor), and can render the same interactive `cognee.visualize_graph()` output `scripts/main.py` writes to `graph_debug.html` at the end of its run - inline, instead of a file you have to go find and open separately.
+
+### Why this is single-workspace, not multi-tenant
+
+`graph_store.py` reads nodes/edges via Cognee's own `get_graph_data()` graph-engine accessor with no per-dataset filtering, and the pipeline's `cognee.search()` calls don't scope by dataset either. So even though `ingest()` accepts a `dataset_name`, the novelty/chat/evidence queries all see everything ever ingested into the local Cognee system - there's no code-level isolation between "workspaces" today. Rather than fake multi-user isolation on top of that, this app is deliberately **one graph at a time**: use the sidebar's "Reset graph" button before starting a new set of papers if you want a clean slate. Making this properly multi-user would mean either running separate Cognee system directories per user (via `SYSTEM_ROOT_DIRECTORY`/`COGNEE_SQLITE_PATH`) or adding dataset-scoped filtering into `graph_store.py` - worth doing if this grows past a hackathon demo.
+
+### Known gotchas carried over from the CLI
+
+- Needs `TRIPLET_EMBEDDING=true` (default in the sidebar) set before your *first* ingest for a graph, or Stage 7 evidence will come back empty.
+- `CAPTION_FIGURES=true` costs one vision API call per embedded image on first ingest of a given PDF (cached by file hash after that).
+- Async: every backend call goes through `asyncio.run()` per Streamlit interaction, since Streamlit's script-rerun model has no persistent event loop between reruns.
 
 ## Configuration
 
@@ -158,11 +218,11 @@ See [`docs/APP_GUIDE.md`](docs/APP_GUIDE.md) for a full tour of the UI's tabs, i
 - **LLM / embeddings:** OpenAI (`gpt-4.1-mini`, `text-embedding-3-small`)
 - **PDF parsing:** pymupdf / pymupdf4llm
 - **Interface:** Streamlit
-- **Persistence:** SQLite (graph engine's own store) + an append-only JSONL run-history log
+- **Persistence:** Cognee's own graph/vector/metadata stores + an append-only JSONL run-history log
 
 ## Acknowledgements
 
-Built during a hackathon organized by [Cognee](https://cognee.ai/), with [HardikShreays](https://github.com/HardikShreays) as a collaborator on the team.
+Built during a hackathon organized by Cognee, with [HardikShreays](https://github.com/HardikShreays) as a collaborator on the team.
 
 ## License
 

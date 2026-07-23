@@ -14,7 +14,7 @@ from novelgraph.novelty import find_novel_pairs
 
 
 async def main():
-    nodes, edges = load_graph()
+    nodes, edges = await load_graph()
     print(f"Loaded {len(nodes)} nodes and {len(edges)} edges.\n")
 
     print("--- Novel pairs ---")

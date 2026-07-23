@@ -95,7 +95,7 @@ def _build_query_with_context(history: deque, query: str) -> str:
     )
 
 
-def _paper_inventory_answer(query: str) -> str | None:
+async def _paper_inventory_answer(query: str) -> str | None:
     """Answer simple paper inventory questions locally, with zero LLM calls."""
     normalized = query.lower()
     asks_about_papers = re.search(r"\b(papers?|documents?|pdfs?)\b", normalized)
@@ -107,7 +107,7 @@ def _paper_inventory_answer(query: str) -> str | None:
         return None
 
     try:
-        nodes, _ = load_graph()
+        nodes, _ = await load_graph()
     except Exception:
         return None
 
@@ -147,7 +147,7 @@ async def ask(query: str, history: deque | None = None) -> str:
     pronouns/follow-ups. Does not mutate `history` - callers append the
     returned answer themselves so both the CLI REPL and the Streamlit UI
     can manage their own session state."""
-    local_answer = _paper_inventory_answer(query)
+    local_answer = await _paper_inventory_answer(query)
     if local_answer is not None:
         return local_answer
 

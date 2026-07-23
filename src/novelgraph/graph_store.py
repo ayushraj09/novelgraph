@@ -1,26 +1,49 @@
 """
-Shared helper for reading Cognee's graph directly out of its SQLite
-metadata store (cognee_db), used by both novelty.py and temporal.py.
+Shared helper for reading Cognee's graph, used by novelty.py, temporal.py,
+chat.py, and app.py.
 
-This exists because SearchType.CYPHER and the Ladybug/Kuzu Cypher layer
-were found to be unreliable in this environment - reading the `nodes` and
-`edges` tables directly is a zero-cost (no LLM/embedding calls), reliable
-alternative for structural graph queries.
+`load_graph()` reads via Cognee's own documented accessor -
+`get_graph_engine().get_graph_data()` - rather than reading cognee_db's
+SQLite `nodes`/`edges` tables directly. This project originally read
+those SQLite tables directly (also avoiding SearchType.CYPHER, which was
+found unreliable in this environment). That worked against the Cognee
+version this was first built on, but as of Cognee 1.4.0 the graph itself
+lives in a separate per-dataset graph-engine store (Kuzu / Neo4j /
+NetworkX / Cognee's own "ladybug" engine, depending on config - check
+`dataset_database.graph_database_provider` in cognee_db to see which one
+a given install uses) - the SQLite `nodes`/`edges` tables are empty.
+`get_graph_data()` is Cognee's own stable accessor for exactly this, used
+internally by `cognee.visualize_graph()` itself, so it stays correct
+across whichever backend is actually configured. It's still a pure local
+read against the graph engine - no LLM/embedding calls, same zero-cost
+property this module has always had.
 
-Run inspect_db.py first any time these column-name guesses stop matching -
-it dumps the actual schema so the *_CANDIDATES lists below can be corrected.
+`load_graph()` returns nodes/edges as flat dicts (not the raw
+`(node_id, properties)` / `(source_id, target_id, label, properties)`
+tuples `get_graph_data()` returns), so pick_col/node_property/
+resolve_node_name below - and every caller in novelty.py, temporal.py,
+chat.py, and app.py - keep working unchanged.
+
+Run inspect_db.py first any time a real run's node/edge property names
+don't match what's expected here - it prints live counts and sample
+nodes/edges straight from the graph engine.
 """
 
-import os
 import glob
 import json
+import os
 import re
 import sqlite3
 import re as _re
 
-# Cognee's `edges.source_node_id` / `destination_node_id` reference
-# `nodes.slug`, not the relational row `nodes.id`.
-NODE_ID_CANDIDATES = ["slug", "id", "node_id", "uuid", "data_point_id"]
+from cognee.infrastructure.databases.graph import get_graph_engine
+
+# Property-name candidates. get_graph_data()'s per-node/edge properties
+# dict is expected to already use the first candidate in each list below
+# (matching schema.py's DataPoint fields and Cognee's own edge property
+# names) - the remaining candidates are a fallback for property-naming
+# differences across Cognee versions/backends.
+NODE_ID_CANDIDATES = ["id", "slug", "node_id", "uuid", "data_point_id"]
 NODE_NAME_CANDIDATES = ["label", "name", "node_name", "text", "value"]
 NODE_TYPE_CANDIDATES = ["type", "class_name", "label", "node_type", "category"]
 NODE_PROPERTIES_BLOB_CANDIDATES = ["attributes", "properties", "metadata", "data", "payload", "extra"]
@@ -61,6 +84,11 @@ def _env_value(name):
 
 
 def find_cognee_db():
+    """Locates cognee_db, the SQLite METADATA store (data/datasets/
+    pipeline_runs/permissions/etc.) - NOT where graph nodes/edges live as
+    of Cognee 1.4.0 (see this module's docstring). Still useful for
+    inspect_db.py's metadata dump and for confirming which graph-engine
+    backend a given install is actually configured to use."""
     env_path = _env_value("COGNEE_SQLITE_PATH")
     if env_path:
         return os.path.expanduser(env_path)
@@ -102,26 +130,37 @@ def pick_col(row, candidates, table_name, required=True):
     return None
 
 
-def load_graph():
-    """Returns (nodes, edges) as lists of dicts, straight from cognee_db."""
-    db_path = find_cognee_db()
-    if not db_path or not os.path.exists(db_path):
-        raise RuntimeError(
-            "Could not locate cognee_db. Run inspect_db.py to find it, then "
-            "set COGNEE_SQLITE_PATH explicitly if needed."
-        )
-    conn = sqlite3.connect(db_path)
-    nodes = _load_table(conn, "nodes")
-    edges = _load_table(conn, "edges")
-    conn.close()
+async def load_graph():
+    """Returns (nodes, edges) as lists of flat dicts, read live from
+    Cognee's graph engine via get_graph_data(). This is async because
+    get_graph_engine()/get_graph_data() are - every caller already runs
+    inside (or can be wrapped in) an async context; see app.py's
+    run_async() for the Streamlit-side wrapper."""
+    graph_engine = await get_graph_engine()
+    raw_nodes, raw_edges = await graph_engine.get_graph_data()
+
+    nodes = [
+        {"id": node_id, **(properties or {})}
+        for node_id, properties in raw_nodes
+    ]
+    edges = [
+        {
+            "source_node_id": source_id,
+            "destination_node_id": target_id,
+            "relationship_name": relationship_label,
+            **(properties or {}),
+        }
+        for source_id, target_id, relationship_label, properties in raw_edges
+    ]
     return nodes, edges
 
 
 def node_property(node, key, blob_candidates=NODE_PROPERTIES_BLOB_CANDIDATES):
     """
     Reads a schema field (e.g. 'year') off a node dict. Tries a direct
-    column first (e.g. node['year']), then falls back to parsing a JSON
-    properties blob if the DB stores extra DataPoint fields that way.
+    key first (e.g. node['year']), then falls back to parsing a JSON
+    properties blob if the graph engine nests extra DataPoint fields
+    that way instead of flattening them onto the node dict directly.
     """
     if key in node and node[key] is not None:
         return node[key]
@@ -140,12 +179,12 @@ def node_property(node, key, blob_candidates=NODE_PROPERTIES_BLOB_CANDIDATES):
 
 def resolve_node_name(node, name_col):
     """
-    Prefers the exact 'name' field from the attributes/properties JSON blob
-    (matches schema.py's Method/DatasetNode/Task.name exactly) over the
-    `label` column, which Cognee sometimes computes/concatenates from
-    metadata['index_fields'] rather than storing the raw field verbatim.
-    Falls back to the label/name column if no 'name' property is found
-    (e.g. for Paper nodes, which use 'title' instead of 'name').
+    Prefers the exact 'name' field (matches schema.py's Method/
+    DatasetNode/Task.name exactly) over the label/name column, which
+    Cognee sometimes computes/concatenates from indexed fields rather
+    than storing the raw field verbatim. Falls back to the label/name
+    column if no 'name' property is found (e.g. for Paper nodes, which
+    use 'title' instead of 'name').
     """
     exact_name = node_property(node, "name")
     if exact_name:
