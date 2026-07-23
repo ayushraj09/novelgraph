@@ -102,7 +102,6 @@ Every logged run also updates `run_history.jsonl` (cumulative stats above), so r
 ## Project layout
 
 ```
-.
 ├── src/novelgraph/          # Installable package — all core logic
 │   ├── schema.py            # Typed DataPoint graph schema
 │   ├── config.py            # Auto-resolves Cognee's storage paths to this project's own folder
